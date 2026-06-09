@@ -1,0 +1,18 @@
+{
+  "version": "0.1.0",
+  "language": "zh-CN",
+  "prompts": {
+    "system": {
+      "file": "system.md",
+      "requiredVariables": ["cwd", "platform", "maxSteps"]
+    },
+    "task": {
+      "file": "task.md",
+      "requiredVariables": ["task"]
+    },
+    "toolObservation": {
+      "file": "tool-observation.md",
+      "requiredVariables": ["command", "exitCode", "stdout", "stderr"]
+    }
+  }
+}
