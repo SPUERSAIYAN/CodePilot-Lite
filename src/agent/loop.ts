@@ -3,9 +3,15 @@ import type { Model } from "../models/model.js";
 import type { PromptService } from "../prompts/index.js";
 import { executeToolCommand, type ToolResult } from "../tools/llm-tools.js";
 import { parseAgentAction } from "./parser.js";
-import type { AgentEventHandler, Message } from "./types.js";
+import { parseReflectionDecision } from "./reflection.js";
+import type { AgentEventHandler, Message, ToolCommand } from "./types.js";
 
 const maxSteps = 10;
+const defaultMaxReflections = 10;
+
+export interface AgentRunOptions {
+  maxReflections?: number;
+}
 
 export async function runAgent(
   task: string,
@@ -13,8 +19,17 @@ export async function runAgent(
   promptService: PromptService,
   repoMapService: RepoMapService,
   onEvent?: AgentEventHandler,
+  options: AgentRunOptions = {},
 ): Promise<string> {
-  const agent = new DefaultAgent(task, model, promptService, await repoMapService.getRepoMap(), repoMapService, onEvent);
+  const agent = new DefaultAgent(
+    task,
+    model,
+    promptService,
+    await repoMapService.getRepoMap(),
+    repoMapService,
+    onEvent,
+    options,
+  );
 
   return agent.run();
 }
@@ -22,15 +37,19 @@ export async function runAgent(
 export class DefaultAgent {
   private readonly messages: Message[];
   private stepCount = 0;
+  private reflectionCount = 0;
+  private readonly maxReflections: number;
 
   constructor(
-    task: string,
+    private readonly task: string,
     private readonly model: Model,
     private readonly promptService: PromptService,
     repoMap: string,
     private readonly repoMapService: RepoMapService,
     private readonly onEvent?: AgentEventHandler,
+    options: AgentRunOptions = {},
   ) {
+    this.maxReflections = options.maxReflections ?? defaultMaxReflections;
     this.messages = [
       {
         role: "system",
@@ -117,6 +136,59 @@ export class DefaultAgent {
         stderr: result.stderr,
       }),
     });
+    await this.reflect(action.command, result);
+  }
+
+  private async reflect(action: ToolCommand, result: ToolResult): Promise<void> {
+    if (this.reflectionCount >= this.maxReflections) {
+      return;
+    }
+
+    this.reflectionCount += 1;
+
+    const reflectionPrompt = this.promptService.renderReflectionPrompt({
+      task: this.task,
+      lastAction: JSON.stringify(action),
+      toolResult: summarizeToolResult(result),
+      testResult: summarizeTestResult(action, result),
+      errorInfo: summarizeErrorInfo(result),
+      command: result.command,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+
+    let decision;
+    try {
+      decision = parseReflectionDecision(await this.model.generate([
+        ...this.messages,
+        { role: "user", content: reflectionPrompt },
+      ]));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.onEvent?.({
+        type: "error",
+        message: `复盘输出无法解析：${message}。已回到普通 ReAct 流程。`,
+      });
+      this.messages.push({
+        role: "reflection",
+        content: `复盘解析失败：${message}。请继续按 ReAct 协议推进。`,
+      });
+      return;
+    }
+
+    this.onEvent?.({ type: "reflection", text: decision.summary });
+
+    if (decision.type === "final") {
+      this.onEvent?.({ type: "final", answer: decision.answer });
+      this.messages.push({ role: "exit", content: decision.answer });
+      return;
+    }
+
+    this.messages.push({
+      role: "reflection",
+      content: `复盘结果：${decision.summary}\n下一步建议：${decision.next}`,
+    });
   }
 }
 
@@ -139,4 +211,35 @@ function formatObservation(result: ToolResult): string {
   const stderrLength = result.stderr.length;
 
   return `命令完成，exitCode=${result.exitCode}，stdout ${stdoutLength} 字符，stderr ${stderrLength} 字符。详情已交给模型分析。`;
+}
+
+function summarizeToolResult(result: ToolResult): string {
+  const stdoutLength = result.stdout.length;
+  const stderrLength = result.stderr.length;
+  return `exitCode=${result.exitCode}，stdout ${stdoutLength} 字符，stderr ${stderrLength} 字符。`;
+}
+
+function summarizeTestResult(action: ToolCommand, result: ToolResult): string {
+  if (action.name !== "run_shell" || !looksLikeTestCommand(action.command)) {
+    return "上一轮没有运行测试命令。";
+  }
+
+  if (result.exitCode === 0) {
+    return "测试命令通过。";
+  }
+
+  return `测试命令失败，exitCode=${result.exitCode}。`;
+}
+
+function summarizeErrorInfo(result: ToolResult): string {
+  const combined = [result.stderr, result.stdout].filter(Boolean).join("\n").trim();
+  if (!combined || result.exitCode === 0) {
+    return "无";
+  }
+
+  return combined.slice(0, 2000);
+}
+
+function looksLikeTestCommand(command: string): boolean {
+  return /\b(test|typecheck|build|check|vitest|jest|mocha|pytest|cargo test|go test)\b/i.test(command);
 }

@@ -96,6 +96,10 @@ export function printObservation(text: string): void {
   console.log(`${style("结果 >", "success")} ${text}`);
 }
 
+export function printReflection(text: string): void {
+  console.log(`${style("复盘 >", "primary")} ${text}`);
+}
+
 export function printFinal(answer: string): void {
   stopActivity();
   console.log(`${style("AI >", "primary")} ${renderMarkdown(answer)}`);
@@ -128,6 +132,12 @@ export function renderAgentEvent(event: AgentEvent): void {
   if (event.type === "observation") {
     stopActivity();
     printObservation(event.text);
+    return;
+  }
+
+  if (event.type === "reflection") {
+    stopActivity();
+    printReflection(event.text);
     return;
   }
 

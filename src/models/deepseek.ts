@@ -56,6 +56,13 @@ function toChatMessages(messages: Message[]): ChatCompletionMessageParam[] {
       };
     }
 
+    if (message.role === "reflection") {
+      return {
+        role: "user",
+        content: `复盘结果：${message.content}`,
+      };
+    }
+
     if (message.role === "exit") {
       return {
         role: "assistant",

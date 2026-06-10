@@ -13,6 +13,10 @@
     "toolObservation": {
       "file": "tool-observation.md",
       "requiredVariables": ["command", "exitCode", "stdout", "stderr"]
+    },
+    "reflection": {
+      "file": "reflection.md",
+      "requiredVariables": ["task", "lastAction", "toolResult", "testResult", "errorInfo", "command", "exitCode", "stdout", "stderr"]
     }
   }
 }

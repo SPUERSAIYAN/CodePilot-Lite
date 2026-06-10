@@ -34,4 +34,16 @@ export interface PromptService {
     stdout: string;
     stderr: string;
   }): string;
+
+  renderReflectionPrompt(input: {
+    task: string;
+    lastAction: string;
+    toolResult: string;
+    testResult: string;
+    errorInfo: string;
+    command: string;
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+  }): string;
 }

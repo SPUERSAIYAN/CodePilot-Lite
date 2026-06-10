@@ -1,4 +1,4 @@
-export type Role = "system" | "user" | "assistant" | "tool" | "exit";
+export type Role = "system" | "user" | "assistant" | "tool" | "reflection" | "exit";
 
 export interface Message {
   role: Role;
@@ -43,11 +43,24 @@ export type AgentAction =
       answer: string;
     };
 
+export type ReflectionDecision =
+  | {
+      type: "continue";
+      summary: string;
+      next: string;
+    }
+  | {
+      type: "final";
+      summary: string;
+      answer: string;
+    };
+
 export type AgentEvent =
   | { type: "model_start" }
   | { type: "plan"; text: string }
   | { type: "command"; command: ToolCommand }
   | { type: "observation"; text: string }
+  | { type: "reflection"; text: string }
   | { type: "final"; answer: string }
   | { type: "error"; message: string };
 

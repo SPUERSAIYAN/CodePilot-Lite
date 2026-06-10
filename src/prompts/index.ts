@@ -32,6 +32,20 @@ class DefaultPromptService implements PromptService {
   }): string {
     return renderPrompt(this.bundle, "toolObservation", input);
   }
+
+  renderReflectionPrompt(input: {
+    task: string;
+    lastAction: string;
+    toolResult: string;
+    testResult: string;
+    errorInfo: string;
+    command: string;
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+  }): string {
+    return renderPrompt(this.bundle, "reflection", input);
+  }
 }
 
 export type { PromptService } from "./types.js";
