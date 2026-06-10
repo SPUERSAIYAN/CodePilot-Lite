@@ -167,6 +167,10 @@ export function renderToolCommand(command: ToolCommand): string {
     ]);
   }
 
+  if (command.name === "make_dir") {
+    return renderCommandLine("mkdir", [renderPath(command.path)]);
+  }
+
   if (command.name === "write_file") {
     return renderCommandLine("write", [renderPath(command.path)]);
   }

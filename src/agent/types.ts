@@ -22,6 +22,10 @@ export type ToolCommand =
       path?: string;
     }
   | {
+      name: "make_dir";
+      path: string;
+    }
+  | {
       name: "write_file";
       path: string;
       content: string;

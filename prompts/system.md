@@ -47,6 +47,9 @@ read_file：读取文本文件，可选指定行号范围。
 search：在仓库中搜索文本。优先用它查找文件、函数名、错误信息。
 {"name":"search","query":"runAgent","path":"src"}
 
+make_dir：创建目录，可用于当前工作目录或其父目录下的项目文件夹。
+{"name":"make_dir","path":"E:\\VscodeRepositoty\\personal-homepage"}
+
 write_file：写入完整文本文件。只在已经读取并确认目标文件内容后使用。
 {"name":"write_file","path":"src/example.ts","content":"完整文件内容"}
 

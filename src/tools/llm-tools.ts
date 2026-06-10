@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { ToolCommand } from "../agent/types.js";
@@ -32,6 +32,10 @@ export async function executeToolCommand(command: ToolCommand, options: ToolExec
       return await searchText(command);
     }
 
+    if (command.name === "make_dir") {
+      return await makeDirectory(command, options);
+    }
+
     if (command.name === "write_file") {
       return await writeTextFile(command, options);
     }
@@ -52,7 +56,7 @@ export function formatToolCommand(command: ToolCommand): string {
 }
 
 async function listFiles(command: Extract<ToolCommand, { name: "list_files" }>): Promise<ToolResult> {
-  const targetPath = resolveWorkspacePath(command.path ?? ".");
+  const targetPath = resolveAllowedPath(command.path ?? ".");
   rejectSensitivePath(targetPath);
 
   const entries = await readdir(targetPath, { withFileTypes: true });
@@ -70,7 +74,7 @@ async function listFiles(command: Extract<ToolCommand, { name: "list_files" }>):
 }
 
 async function readTextFile(command: Extract<ToolCommand, { name: "read_file" }>): Promise<ToolResult> {
-  const targetPath = resolveWorkspacePath(command.path);
+  const targetPath = resolveAllowedPath(command.path);
   rejectSensitivePath(targetPath);
 
   const content = await readFile(targetPath, "utf8");
@@ -97,7 +101,7 @@ async function readTextFile(command: Extract<ToolCommand, { name: "read_file" }>
 
 async function searchText(command: Extract<ToolCommand, { name: "search" }>): Promise<ToolResult> {
   const searchPath = command.path ?? defaultSearchPath;
-  const targetPath = resolveWorkspacePath(searchPath);
+  const targetPath = resolveAllowedPath(searchPath);
   rejectSensitivePath(targetPath);
 
   const result = await runShell(
@@ -112,12 +116,30 @@ async function searchText(command: Extract<ToolCommand, { name: "search" }>): Pr
   };
 }
 
+async function makeDirectory(
+  command: Extract<ToolCommand, { name: "make_dir" }>,
+  options: ToolExecutionOptions,
+): Promise<ToolResult> {
+  const targetPath = resolveAllowedPath(command.path);
+  rejectSensitivePath(targetPath);
+  await mkdir(targetPath, { recursive: true });
+  options.onWrite?.();
+
+  return {
+    command: formatToolCommand(command),
+    exitCode: 0,
+    stdout: `已创建目录 ${command.path}`,
+    stderr: "",
+  };
+}
+
 async function writeTextFile(
   command: Extract<ToolCommand, { name: "write_file" }>,
   options: ToolExecutionOptions,
 ): Promise<ToolResult> {
-  const targetPath = resolveWorkspacePath(command.path);
+  const targetPath = resolveAllowedPath(command.path);
   rejectSensitivePath(targetPath);
+  await mkdir(path.dirname(targetPath), { recursive: true });
   await writeFile(targetPath, command.content, "utf8");
   options.onWrite?.();
 
@@ -140,16 +162,30 @@ async function runCommand(command: Extract<ToolCommand, { name: "run_shell" }>):
   };
 }
 
-function resolveWorkspacePath(inputPath: string): string {
-  const root = process.cwd();
-  const resolved = path.resolve(root, inputPath);
-  const relative = path.relative(root, resolved);
+function resolveAllowedPath(inputPath: string): string {
+  const resolved = path.resolve(process.cwd(), inputPath);
 
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("工具路径必须位于当前工作目录内。");
+  if (!getAllowedRoots().some((root) => isInsideRoot(resolved, root))) {
+    throw new Error(`工具路径必须位于允许目录内：${getAllowedRoots().join("；")}`);
   }
 
   return resolved;
+}
+
+function getAllowedRoots(): string[] {
+  const cwd = path.resolve(process.cwd());
+  const parent = path.dirname(cwd);
+
+  if (parent === cwd || path.dirname(parent) === parent) {
+    return [cwd];
+  }
+
+  return [cwd, parent];
+}
+
+function isInsideRoot(targetPath: string, root: string): boolean {
+  const relative = path.relative(root, targetPath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 function rejectSensitivePath(targetPath: string): void {

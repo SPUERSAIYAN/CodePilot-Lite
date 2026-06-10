@@ -78,6 +78,13 @@ function parseToolCommand(value: unknown): ToolCommand {
     };
   }
 
+  if (value.name === "make_dir") {
+    return {
+      name: "make_dir",
+      path: readRequiredString(value.path, "make_dir.path"),
+    };
+  }
+
   if (value.name === "write_file") {
     return {
       name: "write_file",
@@ -93,7 +100,7 @@ function parseToolCommand(value: unknown): ToolCommand {
     };
   }
 
-  throw new Error("tool.command.name 必须是 list_files、read_file、search、write_file 或 run_shell。");
+  throw new Error("tool.command.name 必须是 list_files、read_file、search、make_dir、write_file 或 run_shell。");
 }
 
 function readRequiredString(value: unknown, name: string): string {
