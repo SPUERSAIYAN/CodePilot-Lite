@@ -4,17 +4,26 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "test": "node --import tsx --test tests/context/repo-map.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@lenml/tokenizer-deepseek_v4": "^3.7.2",
+    "@vscode/tree-sitter-wasm": "^0.3.1",
     "dotenv": "latest",
     "execa": "latest",
-    "openai": "latest"
+    "openai": "latest",
+    "web-tree-sitter": "^0.26.9"
   },
   "devDependencies": {
     "@types/node": "latest",
     "tsx": "latest",
     "typescript": "latest"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "engines": {
     "node": "20.15.0"

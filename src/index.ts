@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { startRepl } from "./cli/repl.js";
 import { loadConfig } from "./config/env.js";
+import { createRepoMapService } from "./context/repo-map.js";
 import { DeepSeekModel } from "./models/deepseek.js";
 import { createPromptService } from "./prompts/index.js";
 
@@ -12,16 +13,26 @@ async function main(): Promise<void> {
     const promptService = await createPromptService();
     const model = new DeepSeekModel(config);
     const project = await loadProjectMetadata();
-
-    await startRepl(model, promptService, {
-      appName: project.name,
-      appVersion: project.version,
-      commandName: project.name,
-      modelLabel: formatModelLabel(config.deepseekModel),
-      contextWindowTokens: config.deepseekContextWindowTokens,
-      contextUsedTokens: 0,
-      modelEffort: config.modelEffort,
+    const repoMapService = createRepoMapService({
+      rootDir: process.cwd(),
+      enabled: config.repoMapEnabled,
+      maxTokens: config.repoMapMaxTokens,
     });
+
+    await startRepl(
+      model,
+      promptService,
+      repoMapService,
+      {
+        appName: project.name,
+        appVersion: project.version,
+        commandName: project.name,
+        modelLabel: formatModelLabel(config.deepseekModel),
+        contextWindowTokens: config.deepseekContextWindowTokens,
+        contextUsedTokens: 0,
+        modelEffort: config.modelEffort,
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`启动失败：${message}`);

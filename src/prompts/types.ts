@@ -21,6 +21,7 @@ export interface PromptService {
     cwd: string;
     platform: NodeJS.Platform;
     maxSteps: number;
+    repoMap: string;
   }): string;
 
   renderTaskPrompt(input: {

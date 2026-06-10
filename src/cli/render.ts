@@ -1,15 +1,17 @@
 import { stdout } from "node:process";
 
-import type { AgentEvent } from "../agent/types.js";
+import type { AgentEvent, ToolCommand } from "../agent/types.js";
 
 const useColor = stdout.isTTY;
+const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+let spinnerTimer: NodeJS.Timeout | undefined;
+let spinnerFrameIndex = 0;
 
 const colors = {
   primary: "#cc785c",
   ink: "#141413",
   muted: "#6c6a64",
   hairline: "#e6dfd8",
-  surfaceCard: "#efe9de",
   surfaceDark: "#181715",
   onDark: "#faf9f5",
   success: "#5db872",
@@ -36,8 +38,36 @@ export function printWelcome(options: CliRenderOptions): void {
   console.log("");
 }
 
-export function printPrompt(): string {
-  return `${inputTopLine()}\n${style("│", "rule")} `;
+export function printPrompt(_options: CliRenderOptions): string {
+  return `${inputTopLine()}\n`;
+}
+
+export function renderInputFrame(options: CliRenderOptions, value: string): string {
+  const visibleValue = fitInputValue(value);
+
+  return [
+    inputTopLine(),
+    visibleValue,
+    style(inputBottomLine(), "rule"),
+    statusLine(`上下文 ${formatContextStatus(options)}`, `模型 ${options.modelLabel} · 推理 ${formatModelEffort(options.modelEffort)}`),
+  ].join("\n");
+}
+
+export function moveCursorToInputValue(value: string): string {
+  const column = displayWidth(fitInputValue(value));
+  return `\u001b[2A\r${column > 0 ? `\u001b[${column}C` : ""}`;
+}
+
+export function saveCursorPosition(): string {
+  return "\u001b7";
+}
+
+export function restoreCursorPosition(): string {
+  return "\u001b8";
+}
+
+export function moveCursorBelowInputFrame(): string {
+  return "\u001b[3B\r\n";
 }
 
 export function printStatus(options: CliRenderOptions): void {
@@ -46,21 +76,20 @@ export function printStatus(options: CliRenderOptions): void {
 }
 
 export function printSubmittedInputStatus(options: CliRenderOptions): void {
-  console.log("");
   printStatus(options);
   console.log("");
 }
 
 export function printModelStart(): void {
-  console.log(style("AI 正在分析...", "muted"));
+  startActivity("AI 正在思考...");
 }
 
 export function printPlan(text: string): void {
   console.log(`${style("计划 >", "primary")} ${text}`);
 }
 
-export function printCommand(command: string): void {
-  console.log(`${style("命令 >", "darkLabel")} ${style(command, "code")}`);
+export function printCommand(command: ToolCommand): void {
+  console.log(`${style("命令 >", "darkLabel")} ${renderToolCommand(command)}`);
 }
 
 export function printObservation(text: string): void {
@@ -68,10 +97,12 @@ export function printObservation(text: string): void {
 }
 
 export function printFinal(answer: string): void {
-  console.log(`${style("AI >", "primary")} ${answer}`);
+  stopActivity();
+  console.log(`${style("AI >", "primary")} ${renderMarkdown(answer)}`);
 }
 
 export function printError(message: string): void {
+  stopActivity();
   console.error(`${style("错误 >", "error")} ${message}`);
 }
 
@@ -82,26 +113,105 @@ export function renderAgentEvent(event: AgentEvent): void {
   }
 
   if (event.type === "plan") {
+    stopActivity();
     printPlan(event.text);
     return;
   }
 
   if (event.type === "command") {
+    stopActivity();
     printCommand(event.command);
+    startActivity("正在执行命令...");
     return;
   }
 
   if (event.type === "observation") {
+    stopActivity();
     printObservation(event.text);
     return;
   }
 
   if (event.type === "final") {
+    stopActivity();
     printFinal(event.answer);
     return;
   }
 
+  stopActivity();
   printError(event.message);
+}
+
+export function renderToolCommand(command: ToolCommand): string {
+  if (command.name === "list_files") {
+    return renderCommandLine("ls", [renderPath(command.path ?? ".")]);
+  }
+
+  if (command.name === "read_file") {
+    return renderCommandLine("read", [renderPath(formatReadPath(command))]);
+  }
+
+  if (command.name === "search") {
+    return renderCommandLine("rg", [
+      style(quoteArgument(command.query), "argument"),
+      renderPath(command.path ?? "."),
+    ]);
+  }
+
+  if (command.name === "write_file") {
+    return renderCommandLine("write", [renderPath(command.path)]);
+  }
+
+  return renderShellCommand(command.command);
+}
+
+export function renderMarkdown(text: string): string {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const rendered: string[] = [];
+  let inCodeBlock = false;
+
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+
+    if (inCodeBlock) {
+      rendered.push(renderCodeLine(line));
+      continue;
+    }
+
+    rendered.push(renderMarkdownLine(line));
+  }
+
+  return rendered.join("\n");
+}
+
+function startActivity(text: string): void {
+  stopActivity();
+
+  if (!useColor) {
+    console.log(style(text, "muted"));
+    return;
+  }
+
+  const renderFrame = (): void => {
+    const frame = spinnerFrames[spinnerFrameIndex % spinnerFrames.length];
+    spinnerFrameIndex += 1;
+    stdout.write(`\r${style(frame, "primary")} ${style(text, "muted")}`);
+  };
+
+  renderFrame();
+  spinnerTimer = setInterval(renderFrame, 90);
+}
+
+function stopActivity(): void {
+  if (!spinnerTimer) {
+    return;
+  }
+
+  clearInterval(spinnerTimer);
+  spinnerTimer = undefined;
+  stdout.write(`\r${" ".repeat(Math.max(stdout.columns || 80, 40))}\r`);
 }
 
 function style(text: string, token: StyleToken): string {
@@ -137,12 +247,24 @@ function style(text: string, token: StyleToken): string {
     return fg(colors.muted, text);
   }
 
+  if (token === "argument") {
+    return fg(colors.muted, text);
+  }
+
+  if (token === "path") {
+    return fg(colors.ink, text);
+  }
+
   if (token === "darkLabel") {
     return `${bg(colors.surfaceDark)}${fg(colors.onDark)}${text}${reset()}`;
   }
 
-  if (token === "code") {
-    return `${bg(colors.surfaceCard)}${fg(colors.ink)}${text}${reset()}`;
+  if (token === "codeInline") {
+    return `${bg(colors.surfaceDark)}${fg(colors.onDark)} ${text} ${reset()}`;
+  }
+
+  if (token === "codeBlock") {
+    return `${bg(colors.surfaceDark)}${fg(colors.onDark)}${text}${reset()}`;
   }
 
   if (token === "success") {
@@ -174,19 +296,148 @@ function fullWidthLine(): string {
 function inputTopLine(): string {
   const width = Math.max(stdout.columns || 80, 40);
   const label = "输入编码任务";
-  const rightRule = "─".repeat(Math.max(width - label.length - 4, 20));
+  const rightRule = "─".repeat(Math.max(width - displayWidth(label) - 3, 20));
 
-  return `${style("╭─ ", "rule")}${style(label, "primary")}${style(` ${rightRule}`, "rule")}`;
+  return `${style("─ ", "rule")}${style(label, "primary")}${style(` ${rightRule}`, "rule")}`;
 }
 
 function inputBottomLine(): string {
-  return `╰${fullWidthLine().slice(1)}`;
+  return fullWidthLine();
+}
+
+function fitInputValue(value: string): string {
+  const width = Math.max((stdout.columns || 80) - 1, 20);
+  const chars = [...value];
+  let result = "";
+  let currentWidth = 0;
+
+  for (let index = chars.length - 1; index >= 0; index -= 1) {
+    const char = chars[index];
+    const widthToAdd = charWidth(char);
+    if (currentWidth + widthToAdd > width) {
+      return `…${result}`;
+    }
+
+    result = `${char}${result}`;
+    currentWidth += widthToAdd;
+  }
+
+  return result;
+}
+
+function fitText(value: string, maxWidth: number): string {
+  if (displayWidth(value) <= maxWidth) {
+    return value;
+  }
+
+  let result = "";
+  let currentWidth = 1;
+
+  for (const char of value) {
+    const widthToAdd = charWidth(char);
+    if (currentWidth + widthToAdd > maxWidth) {
+      return `${result}…`;
+    }
+
+    result += char;
+    currentWidth += widthToAdd;
+  }
+
+  return result;
 }
 
 function statusLine(left: string, right: string): string {
   const width = Math.max(stdout.columns || 80, 40);
-  const gap = Math.max(width - left.length - right.length, 1);
-  return `${style(left, "strong")}${" ".repeat(gap)}${style(right, "strong")}`;
+  const safeRight = fitText(right, Math.floor(width / 2));
+  const leftBudget = Math.max(width - displayWidth(safeRight) - 1, 1);
+  const safeLeft = fitText(left, leftBudget);
+  const gap = Math.max(width - displayWidth(safeLeft) - displayWidth(safeRight), 1);
+
+  return `${style(safeLeft, "strong")}${" ".repeat(gap)}${style(safeRight, "strong")}`;
+}
+
+function renderCommandLine(verb: string, parts: string[]): string {
+  const suffix = parts.length > 0 ? ` ${parts.join(" ")}` : "";
+  return `${style("$", "muted")} ${style(verb, "primary")}${suffix}`;
+}
+
+function renderShellCommand(command: string): string {
+  const trimmed = command.trim();
+  const match = /^(\S+)(\s+[\s\S]*)?$/.exec(trimmed);
+  if (!match) {
+    return renderCommandLine(command, []);
+  }
+
+  const verb = match[1];
+  const rest = match[2]?.trim();
+  return renderCommandLine(verb, rest ? [style(rest, "argument")] : []);
+}
+
+function renderPath(value: string): string {
+  return style(value, "path");
+}
+
+function renderMarkdownLine(line: string): string {
+  const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+  if (heading) {
+    return renderHeading(heading[2], heading[1].length);
+  }
+
+  const unorderedList = /^(\s*)[-*]\s+(.+)$/.exec(line);
+  if (unorderedList) {
+    return `${unorderedList[1]}${style("•", "primary")} ${renderInlineMarkdown(unorderedList[2])}`;
+  }
+
+  const orderedList = /^(\s*)(\d+)\.\s+(.+)$/.exec(line);
+  if (orderedList) {
+    return `${orderedList[1]}${style(`${orderedList[2]}.`, "primary")} ${renderInlineMarkdown(orderedList[3])}`;
+  }
+
+  return renderInlineMarkdown(line);
+}
+
+function renderHeading(text: string, level: number): string {
+  const renderedText = renderInlineMarkdown(text);
+  if (level <= 2) {
+    return `${style(renderedText, "primary")}\n${style("─".repeat(visibleLength(text)), "rule")}`;
+  }
+
+  return style(renderedText, "strong");
+}
+
+function renderInlineMarkdown(text: string): string {
+  return text
+    .replace(/`([^`]+)`/g, (_match, code: string) => style(code, "codeInline"))
+    .replace(/\*\*([^*]+)\*\*/g, (_match, value: string) => style(value, "strong"));
+}
+
+function renderCodeLine(line: string): string {
+  return `${style("│", "darkLabel")} ${style(line, "codeBlock")}`;
+}
+
+function formatReadPath(command: Extract<ToolCommand, { name: "read_file" }>): string {
+  if (command.endLine === undefined) {
+    return command.path;
+  }
+
+  return `${command.path}:${command.startLine ?? 1}-${command.endLine}`;
+}
+
+function quoteArgument(value: string): string {
+  return JSON.stringify(value);
+}
+
+function visibleLength(text: string): number {
+  return Math.max([...text].length, 4);
+}
+
+function displayWidth(text: string): number {
+  return [...text].reduce((width, char) => width + charWidth(char), 0);
+}
+
+function charWidth(char: string): number {
+  const codePoint = char.codePointAt(0) ?? 0;
+  return codePoint >= 0x2e80 ? 2 : 1;
 }
 
 function formatVersion(version: string): string {
@@ -253,7 +504,10 @@ type StyleToken =
   | "rule"
   | "primary"
   | "muted"
+  | "argument"
+  | "path"
   | "darkLabel"
-  | "code"
+  | "codeInline"
+  | "codeBlock"
   | "success"
   | "error";

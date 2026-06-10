@@ -13,6 +13,7 @@ class DefaultPromptService implements PromptService {
     cwd: string;
     platform: NodeJS.Platform;
     maxSteps: number;
+    repoMap: string;
   }): string {
     return renderPrompt(this.bundle, "system", input);
   }

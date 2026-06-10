@@ -4,7 +4,7 @@
   "prompts": {
     "system": {
       "file": "system.md",
-      "requiredVariables": ["cwd", "platform", "maxSteps"]
+      "requiredVariables": ["cwd", "platform", "maxSteps", "repoMap"]
     },
     "task": {
       "file": "task.md",

@@ -1,20 +1,20 @@
+import type { RepoMapService } from "../context/repo-map.js";
 import type { Model } from "../models/model.js";
 import type { PromptService } from "../prompts/index.js";
-import type { ShellResult } from "../tools/shell.js";
-import { runShell } from "../tools/shell.js";
+import { executeToolCommand, type ToolResult } from "../tools/llm-tools.js";
 import { parseAgentAction } from "./parser.js";
 import type { AgentEventHandler, Message } from "./types.js";
 
 const maxSteps = 10;
-const maxObservationLength = 4000;
 
 export async function runAgent(
   task: string,
   model: Model,
   promptService: PromptService,
+  repoMapService: RepoMapService,
   onEvent?: AgentEventHandler,
 ): Promise<string> {
-  const agent = new DefaultAgent(task, model, promptService, onEvent);
+  const agent = new DefaultAgent(task, model, promptService, await repoMapService.getRepoMap(), repoMapService, onEvent);
 
   return agent.run();
 }
@@ -27,6 +27,8 @@ export class DefaultAgent {
     task: string,
     private readonly model: Model,
     private readonly promptService: PromptService,
+    repoMap: string,
+    private readonly repoMapService: RepoMapService,
     private readonly onEvent?: AgentEventHandler,
   ) {
     this.messages = [
@@ -36,6 +38,7 @@ export class DefaultAgent {
           cwd: process.cwd(),
           platform: process.platform,
           maxSteps,
+          repoMap,
         }),
       },
       { role: "user", content: this.promptService.renderTaskPrompt({ task }) },
@@ -99,7 +102,11 @@ export class DefaultAgent {
       this.onEvent?.({ type: "plan", text: action.thought });
     }
     this.onEvent?.({ type: "command", command: action.command });
-    const result = await runShell(action.command);
+    const result = await executeToolCommand(action.command, {
+      onWrite: () => {
+        this.repoMapService.markDirty();
+      },
+    });
     this.onEvent?.({ type: "observation", text: formatObservation(result) });
     this.messages.push({
       role: "tool",
@@ -127,24 +134,9 @@ async function readModelStream(model: Model, messages: Message[]): Promise<strin
   return output;
 }
 
-function formatObservation(result: ShellResult): string {
-  const sections = [`exitCode=${result.exitCode}`];
+function formatObservation(result: ToolResult): string {
+  const stdoutLength = result.stdout.length;
+  const stderrLength = result.stderr.length;
 
-  if (result.stdout) {
-    sections.push(`stdout:\n${truncateObservation(result.stdout)}`);
-  }
-
-  if (result.stderr) {
-    sections.push(`stderr:\n${truncateObservation(result.stderr)}`);
-  }
-
-  return sections.join("\n");
-}
-
-function truncateObservation(output: string): string {
-  if (output.length <= maxObservationLength) {
-    return output;
-  }
-
-  return `${output.slice(0, maxObservationLength)}\n[output truncated]`;
+  return `命令完成，exitCode=${result.exitCode}，stdout ${stdoutLength} 字符，stderr ${stderrLength} 字符。详情已交给模型分析。`;
 }

@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@lenml/tokenizer-deepseek_v4':
+        specifier: ^3.7.2
+        version: 3.7.2
+      '@vscode/tree-sitter-wasm':
+        specifier: ^0.3.1
+        version: 0.3.1
       dotenv:
         specifier: latest
         version: 17.4.2
@@ -17,6 +23,9 @@ importers:
       openai:
         specifier: latest
         version: 6.42.0
+      web-tree-sitter:
+        specifier: ^0.26.9
+        version: 0.26.9
     devDependencies:
       '@types/node':
         specifier: latest
@@ -186,6 +195,12 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@lenml/tokenizer-deepseek_v4@3.7.2':
+    resolution: {integrity: sha512-YHnMRU4NjTt/H1UYvit/TdMz0vhLMk1Ihm+XiFU0sSpkxuuFhmkkn4Gfwyb9f/cCVszegulBNhFXjL9wnz90tQ==}
+
+  '@lenml/tokenizers@3.7.2':
+    resolution: {integrity: sha512-tuap9T7Q80Czor8NHzxjlLNvxEX8MgFINzsBTV+lq1v7G+78YR3ZvBhmLsPHtgqExB4Q4kCJH6dhXOYWSLdHLw==}
+
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
 
@@ -195,6 +210,9 @@ packages:
 
   '@types/node@25.9.2':
     resolution: {integrity: sha512-G05zqtJhcDLb8uslf5EjCxXg9G1KQxiV8OS0R26IC//Eoyitzqe8z37I7cqvnZlrlSfgocQRfSn/AHBZJJFyGw==}
+
+  '@vscode/tree-sitter-wasm@0.3.1':
+    resolution: {integrity: sha512-RJFoomET6FajjG511fmQxeBQfU6M24a0aFZPqpid+ttIxanWf1VGytBG0UmsGjt07qmIPJS8U31D+aecuCucsQ==}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -309,6 +327,9 @@ packages:
     resolution: {integrity: sha512-+QBBXBCvifc56fsbuxZQ6Sic3wqqc3WWaqxs58gvJrcOuN83HGTCwz3oS5phzU9LthRNE9VrJCFCLUgHeeFnfA==}
     engines: {node: '>=18'}
 
+  web-tree-sitter@0.26.9:
+    resolution: {integrity: sha512-YJwSHANl6XFgeEjB8nitgj0qZYt5gkIesJ4w2srS2wcLB4GUa4xcOkM0YaMsU6WNR53YVIkDSY7Ej4pf3IXtCA==}
+
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
@@ -398,6 +419,12 @@ snapshots:
   '@esbuild/win32-x64@0.28.0':
     optional: true
 
+  '@lenml/tokenizer-deepseek_v4@3.7.2':
+    dependencies:
+      '@lenml/tokenizers': 3.7.2
+
+  '@lenml/tokenizers@3.7.2': {}
+
   '@sec-ant/readable-stream@0.4.1': {}
 
   '@sindresorhus/merge-streams@4.0.0': {}
@@ -405,6 +432,8 @@ snapshots:
   '@types/node@25.9.2':
     dependencies:
       undici-types: 7.24.6
+
+  '@vscode/tree-sitter-wasm@0.3.1': {}
 
   cross-spawn@7.0.6:
     dependencies:
@@ -518,6 +547,8 @@ snapshots:
   undici-types@7.24.6: {}
 
   unicorn-magic@0.3.0: {}
+
+  web-tree-sitter@0.26.9: {}
 
   which@2.0.2:
     dependencies:

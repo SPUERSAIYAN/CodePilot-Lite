@@ -1,4 +1,4 @@
-命令执行结果：
+工具执行反馈：
 
 command: {{command}}
 exitCode: {{exitCode}}

@@ -5,11 +5,37 @@ export interface Message {
   content: string;
 }
 
+export type ToolCommand =
+  | {
+      name: "list_files";
+      path?: string;
+    }
+  | {
+      name: "read_file";
+      path: string;
+      startLine?: number;
+      endLine?: number;
+    }
+  | {
+      name: "search";
+      query: string;
+      path?: string;
+    }
+  | {
+      name: "write_file";
+      path: string;
+      content: string;
+    }
+  | {
+      name: "run_shell";
+      command: string;
+    };
+
 export type AgentAction =
   | {
-      type: "shell";
+      type: "tool";
       thought?: string;
-      command: string;
+      command: ToolCommand;
     }
   | {
       type: "final";
@@ -20,7 +46,7 @@ export type AgentAction =
 export type AgentEvent =
   | { type: "model_start" }
   | { type: "plan"; text: string }
-  | { type: "command"; command: string }
+  | { type: "command"; command: ToolCommand }
   | { type: "observation"; text: string }
   | { type: "final"; answer: string }
   | { type: "error"; message: string };
