@@ -6,7 +6,7 @@ import { runAgent } from "../../src/agent/loop.js";
 import { parseReflectionDecision } from "../../src/agent/reflection.js";
 import type { AgentEvent, Message } from "../../src/agent/types.js";
 import type { RepoMapService } from "../../src/context/repo-map.js";
-import type { Model } from "../../src/models/model.js";
+import type { Model, ModelRequestOptions } from "../../src/models/model.js";
 import { createPromptService } from "../../src/prompts/index.js";
 
 test("parseReflectionDecision parses continue decisions", () => {
@@ -213,6 +213,24 @@ test("runAgent still marks the repo map dirty after write_file", async () => {
   }
 });
 
+test("runAgent stops when aborted during model stream", async () => {
+  const controller = new AbortController();
+  const model = new AbortingStreamModel(controller);
+
+  await assert.rejects(
+    runAgent(
+      "可中断任务",
+      model,
+      await createPromptService(),
+      new FakeRepoMapService(),
+      undefined,
+      { signal: controller.signal },
+    ),
+    /任务已中断/,
+  );
+  assert.equal(model.seenSignal, controller.signal);
+});
+
 class ScriptedModel implements Model {
   readonly messagesAtCalls: Message[][] = [];
   private outputIndex = 0;
@@ -238,6 +256,22 @@ class ScriptedModel implements Model {
     }
 
     return output;
+  }
+}
+
+class AbortingStreamModel implements Model {
+  seenSignal?: AbortSignal;
+
+  constructor(private readonly controller: AbortController) {}
+
+  async generate(): Promise<string> {
+    throw new Error("不应调用 generate。");
+  }
+
+  async *stream(_messages: Message[], options: ModelRequestOptions = {}): AsyncIterable<string> {
+    this.seenSignal = options.signal;
+    this.controller.abort();
+    yield "partial";
   }
 }
 

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "test": "node --import tsx --test tests/context/repo-map.test.ts tests/agent/reflection.test.ts",
+    "test": "node --import tsx --test tests/context/repo-map.test.ts tests/agent/reflection.test.ts tests/utils/abort.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

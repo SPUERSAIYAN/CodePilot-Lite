@@ -11,6 +11,7 @@ const defaultMaxReflections = 10;
 
 export interface AgentRunOptions {
   maxReflections?: number;
+  signal?: AbortSignal;
 }
 
 export async function runAgent(
@@ -39,6 +40,7 @@ export class DefaultAgent {
   private stepCount = 0;
   private reflectionCount = 0;
   private readonly maxReflections: number;
+  private readonly signal?: AbortSignal;
 
   constructor(
     private readonly task: string,
@@ -50,6 +52,7 @@ export class DefaultAgent {
     options: AgentRunOptions = {},
   ) {
     this.maxReflections = options.maxReflections ?? defaultMaxReflections;
+    this.signal = options.signal;
     this.messages = [
       {
         role: "system",
@@ -66,6 +69,8 @@ export class DefaultAgent {
 
   async run(): Promise<string> {
     while (this.messages.at(-1)?.role !== "exit") {
+      this.throwIfAborted();
+
       if (this.stepCount >= maxSteps) {
         const answer = "已达到最大执行步数，本轮任务终止。";
         this.onEvent?.({ type: "final", answer });
@@ -81,12 +86,14 @@ export class DefaultAgent {
   }
 
   async step(): Promise<void> {
+    this.throwIfAborted();
     await this.executeActions(await this.query());
   }
 
   private async query(): Promise<string> {
+    this.throwIfAborted();
     this.onEvent?.({ type: "model_start" });
-    return readModelStream(this.model, this.messages);
+    return readModelStream(this.model, this.messages, this.signal);
   }
 
   private async executeActions(output: string): Promise<void> {
@@ -125,7 +132,9 @@ export class DefaultAgent {
       onWrite: () => {
         this.repoMapService.markDirty();
       },
+      signal: this.signal,
     });
+    this.throwIfAborted();
     this.onEvent?.({ type: "observation", text: formatObservation(result) });
     this.messages.push({
       role: "tool",
@@ -140,6 +149,8 @@ export class DefaultAgent {
   }
 
   private async reflect(action: ToolCommand, result: ToolResult): Promise<void> {
+    this.throwIfAborted();
+
     if (this.reflectionCount >= this.maxReflections) {
       return;
     }
@@ -160,10 +171,13 @@ export class DefaultAgent {
 
     let decision;
     try {
-      decision = parseReflectionDecision(await this.model.generate([
-        ...this.messages,
-        { role: "user", content: reflectionPrompt },
-      ]));
+      decision = parseReflectionDecision(await this.model.generate(
+        [
+          ...this.messages,
+          { role: "user", content: reflectionPrompt },
+        ],
+        { signal: this.signal },
+      ));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.onEvent?.({
@@ -190,12 +204,22 @@ export class DefaultAgent {
       content: `复盘结果：${decision.summary}\n下一步建议：${decision.next}`,
     });
   }
+
+  private throwIfAborted(): void {
+    if (this.signal?.aborted) {
+      throw new Error("任务已中断。");
+    }
+  }
 }
 
-async function readModelStream(model: Model, messages: Message[]): Promise<string> {
+async function readModelStream(model: Model, messages: Message[], signal?: AbortSignal): Promise<string> {
   let output = "";
 
-  for await (const chunk of model.stream(messages)) {
+  for await (const chunk of model.stream(messages, { signal })) {
+    if (signal?.aborted) {
+      throw new Error("任务已中断。");
+    }
+
     output += chunk;
   }
 

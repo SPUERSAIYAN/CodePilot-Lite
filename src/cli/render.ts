@@ -39,35 +39,7 @@ export function printWelcome(options: CliRenderOptions): void {
 }
 
 export function printPrompt(_options: CliRenderOptions): string {
-  return `${inputTopLine()}\n`;
-}
-
-export function renderInputFrame(options: CliRenderOptions, value: string): string {
-  const visibleValue = fitInputValue(value);
-
-  return [
-    inputTopLine(),
-    visibleValue,
-    style(inputBottomLine(), "rule"),
-    statusLine(`上下文 ${formatContextStatus(options)}`, `模型 ${options.modelLabel} · 推理 ${formatModelEffort(options.modelEffort)}`),
-  ].join("\n");
-}
-
-export function moveCursorToInputValue(value: string): string {
-  const column = displayWidth(fitInputValue(value));
-  return `\u001b[2A\r${column > 0 ? `\u001b[${column}C` : ""}`;
-}
-
-export function saveCursorPosition(): string {
-  return "\u001b7";
-}
-
-export function restoreCursorPosition(): string {
-  return "\u001b8";
-}
-
-export function moveCursorBelowInputFrame(): string {
-  return "\u001b[3B\r\n";
+  return `${style("输入编码任务 >", "primary")} `;
 }
 
 export function printStatus(options: CliRenderOptions): void {
@@ -307,36 +279,8 @@ function fullWidthLine(): string {
   return "─".repeat(Math.max(stdout.columns || 80, 40));
 }
 
-function inputTopLine(): string {
-  const width = Math.max(stdout.columns || 80, 40);
-  const label = "输入编码任务";
-  const rightRule = "─".repeat(Math.max(width - displayWidth(label) - 3, 20));
-
-  return `${style("─ ", "rule")}${style(label, "primary")}${style(` ${rightRule}`, "rule")}`;
-}
-
 function inputBottomLine(): string {
   return fullWidthLine();
-}
-
-function fitInputValue(value: string): string {
-  const width = Math.max((stdout.columns || 80) - 1, 20);
-  const chars = [...value];
-  let result = "";
-  let currentWidth = 0;
-
-  for (let index = chars.length - 1; index >= 0; index -= 1) {
-    const char = chars[index];
-    const widthToAdd = charWidth(char);
-    if (currentWidth + widthToAdd > width) {
-      return `…${result}`;
-    }
-
-    result = `${char}${result}`;
-    currentWidth += widthToAdd;
-  }
-
-  return result;
 }
 
 function fitText(value: string, maxWidth: number): string {

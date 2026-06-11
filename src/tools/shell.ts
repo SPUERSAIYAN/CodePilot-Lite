@@ -1,5 +1,7 @@
 import { execa } from "execa";
 
+import { createLinkedAbortController } from "../utils/abort.js";
+
 const maxOutputLength = 12000;
 
 export interface ShellResult {
@@ -9,11 +11,13 @@ export interface ShellResult {
   stderr: string;
 }
 
-export async function runShell(command: string): Promise<ShellResult> {
+export async function runShell(command: string, options: { signal?: AbortSignal } = {}): Promise<ShellResult> {
+  const abort = createLinkedAbortController(options.signal);
   try {
     const result = await execa(command, {
       shell: true,
       reject: false,
+      cancelSignal: abort.signal,
     });
 
     return {
@@ -31,6 +35,8 @@ export async function runShell(command: string): Promise<ShellResult> {
       stdout: "",
       stderr: truncateOutput(message),
     };
+  } finally {
+    abort.cleanup();
   }
 }
 

@@ -16,6 +16,7 @@ export interface ToolResult {
 
 export interface ToolExecutionOptions {
   onWrite?: () => void;
+  signal?: AbortSignal;
 }
 
 export async function executeToolCommand(command: ToolCommand, options: ToolExecutionOptions = {}): Promise<ToolResult> {
@@ -29,7 +30,7 @@ export async function executeToolCommand(command: ToolCommand, options: ToolExec
     }
 
     if (command.name === "search") {
-      return await searchText(command);
+      return await searchText(command, options);
     }
 
     if (command.name === "make_dir") {
@@ -40,8 +41,12 @@ export async function executeToolCommand(command: ToolCommand, options: ToolExec
       return await writeTextFile(command, options);
     }
 
-    return await runCommand(command);
+    return await runCommand(command, options);
   } catch (error) {
+    if (options.signal?.aborted) {
+      throw new Error("任务已中断。");
+    }
+
     return {
       command: formatToolCommand(command),
       exitCode: 1,
@@ -99,13 +104,17 @@ async function readTextFile(command: Extract<ToolCommand, { name: "read_file" }>
   };
 }
 
-async function searchText(command: Extract<ToolCommand, { name: "search" }>): Promise<ToolResult> {
+async function searchText(
+  command: Extract<ToolCommand, { name: "search" }>,
+  options: ToolExecutionOptions,
+): Promise<ToolResult> {
   const searchPath = command.path ?? defaultSearchPath;
   const targetPath = resolveAllowedPath(searchPath);
   rejectSensitivePath(targetPath);
 
   const result = await runShell(
     `rg --line-number --hidden --glob "!.git" --glob "!node_modules" --glob "!**/.env" --glob "!**/*.pem" --glob "!**/*.key" --glob "!**/*secret*" --glob "!**/*token*" ${quote(command.query)} ${quote(searchPath)}`,
+    { signal: options.signal },
   );
 
   return {
@@ -151,8 +160,8 @@ async function writeTextFile(
   };
 }
 
-async function runCommand(command: Extract<ToolCommand, { name: "run_shell" }>): Promise<ToolResult> {
-  const result = await runShell(command.command);
+async function runCommand(command: Extract<ToolCommand, { name: "run_shell" }>, options: ToolExecutionOptions): Promise<ToolResult> {
+  const result = await runShell(command.command, { signal: options.signal });
 
   return {
     command: formatToolCommand(command),
